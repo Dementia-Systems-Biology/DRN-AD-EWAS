@@ -7,24 +7,20 @@ Overview
 In this study, we conducted an epigenome-wide association study (EWAS) to profile DNA methylation and hydroxymethylation in the dorsal raphe nucleus (DRN) of post-mortem brain tissue from individuals with Alzheimer's disease (AD). The repository includes all the necessary R code to reproduce the analysis, from data preprocessing to differential modification analysis, and gene ontology enrichment.
 Contents
 
-    Data Preprocessing: Scripts for loading and preprocessing raw data, including normalization and quality control.
-    Differential Modification Analysis: Code for identifying differentially unmodified positions (DUPs), differentially methylated positions (DMPs), and differentially hydroxymethylated positions (DHPs) across the genome.
-    Gene Ontology Enrichment: Scripts to perform gene ontology enrichment analysis for significant loci.
-    Validation: Code used for the technical validation of significant findings using bisulfite pyrosequencing data.
-    Single-Cell Analysis: Scripts for analyzing cell type-specific DNA modifications in serotonergic and non-serotonergic cells isolated from the DRN using laser capture microdissection (LCM).
+Data Preprocessing: Scripts for loading and preprocessing raw data, including normalization and quality control.
+
+Differential Modification Analysis: Code for identifying differentially unmodified positions (DUPs), differentially methylated positions (DMPs), and differentially hydroxymethylated positions (DHPs) across the genome.
+
+Gene Ontology Enrichment: Scripts to perform gene ontology enrichment analysis for significant loci.
+
+Validation: Code used for the technical validation of significant findings using bisulfite pyrosequencing data.
+
+Single-Cell Analysis: Scripts for analyzing cell type-specific DNA modifications in serotonergic and non-serotonergic cells isolated from the DRN using laser capture microdissection (LCM).
 
 Requirements
 
     R version 3.3.2 or higher
-    Required R packages: wateRmelon, minfi, MLML2R, comb-p, missMethyl, among others specified in the DESCRIPTION file.
-
-Usage
-
-    Data Preprocessing: Run the preprocessing scripts in the preprocessing directory to load and normalize the raw data.
-    Differential Analysis: Execute the scripts in the differential_analysis directory to identify significant DNA modifications.
-    Enrichment Analysis: Use the scripts in the enrichment_analysis directory to perform gene ontology enrichment.
-    Validation: Follow the instructions in the validation directory for bisulfite pyrosequencing data analysis.
-    Single-Cell Analysis: Refer to the single_cell_analysis directory for analyzing DNA modifications in individual cell types.
+    Required R packages: wateRmelon, minfi, MLML2R, comb-p, missMethyl, among others.
 
 Citation
 
