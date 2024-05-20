@@ -1,42 +1,7 @@
----
-title: "DRN_EWAS"
-author: "Ehsan Pishva"
-date: "3 October 2018"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-##Introduction
-
-
-###Study Information
-**Study:** AD-associated DNA modifications in human brainstem (EPI-AD)
-
-**Description:** Case Control/Braak Stage
-
-**QC done by:** Ehsan Pishva
-
-**Study Contact:** Ehsan Pishva(e.pishva@exeter.ac.uk)
-
-**Samples Source:** London Brain Bank()
-
-**Arrays ran by:** GenomeScan
-
-**Location arrays ran:** Genome Scan
-
-**Array used:** Illumina EPIC microarray v1.0
-
-**Date of QC:** `r format(Sys.Date(), format="%d %B %Y")`
-
-**Sample tissue:** DRN Post-Mortem Brain Tissue
-
-##Loading data
-
-
-```{r loadingdata, include=FALSE}
 rm(list=ls())
+
+##Loading libraries
+
 library(methylumi)
 library(wateRmelon)
 require(gdata)
@@ -49,730 +14,288 @@ library(sva)
 library(qqman)
 ```
 
-Loading data
+#Loading data
 
-```{r loadingdata, include=FALSE}
+# Set working directory
 setwd("/mnt/data1/Ehsan/DRN")
-rgSet<-read.metharray.exp(base="/mnt/data1/Ehsan/DRN/IDATS/",extended=TRUE)
-save(rgSet, file="rgSet.LC.Rdata")
-idatPath<-"/mnt/data1/Ehsan/DRN/IDATS/"
-drn.methylumi<-readEPIC(idatPath, barcodes = NULL, oob=F, n=T, parallel=T)
-save(drn.methylumi, file="methylumiset.DRN.Rdata")
 
-drn.pfilters<-pfilter(drn.methylumi, perc=5)
-cpg.pfiltered.drn<-as.character(rownames(drn.pfilters))
+# Load necessary libraries
+library(minfi)
+library(methylumi)
+
+# Read methylation array data
+rgSet <- read.metharray.exp(base = "/mnt/data1/Ehsan/DRN/IDATS/", extended = TRUE)
+save(rgSet, file = "rgSet.LC.Rdata")
+
+# Define path to IDAT files
+idatPath <- "/mnt/data1/Ehsan/DRN/IDATS/"
+
+# Read EPIC data
+drn.methylumi <- readEPIC(idatPath, barcodes = NULL, oob = FALSE, n = TRUE, parallel = TRUE)
+save(drn.methylumi, file = "methylumiset.DRN.Rdata")
+
+# Apply p-filter to methylumi object
+drn.pfilters <- pfilter(drn.methylumi, perc = 5)
+cpg.pfiltered.drn <- as.character(rownames(drn.pfilters))
+
+# Save filtered CpG sites
+save(cpg.pfiltered.drn, file = "cpg.pfiltered.lc.Rdata")
+
+# Load phenotype data
+DRN_PHENO <- read.csv("pheno.drn.all.csv")
+Basename <- substr(DRN_PHENO$sentrix_ID, 14, 32)
+DRN_PHENO <- cbind(DRN_PHENO, Basename)
+
+# Identify samples to be filtered
+filtered <- which(DRN_PHENO$Basename %in% c("200772260017_R01C01", "200772260017_R02C01", "200793300066_R06C01"))
+
+# Samples recommended by GenomeScan to be dropped
+filtered.GS <- which(DRN_PHENO$Basename %in% c("200772260017 R01C01", "200772260017 R02C01", "200772260017 R04C01", "200793300066 R06C01"))
+
+# Display sample names for the filtered indices
+filtered_sample_names <- DRN_PHENO$Sample_Name[filtered]
+
+# Display basename for a specific sample name
+specific_basename <- DRN_PHENO$Basename[which(DRN_PHENO$Sample_Name == "7058-001-BS-043")]
+
+# Filter out samples from the phenotype data
+DRN_PHENO.f <- DRN_PHENO[!DRN_PHENO$Basename %in% c("200772260017_R01C01", "200772260017_R02C01", "200793300066_R06C01", "200793300066_R05C01"),]
+
+# Filter out samples from the rgSet
+rgSet.f <- rgSet[, !colnames(rgSet) %in% c("200772260017_R01C01", "200772260017_R02C01", "200793300066_R06C01", "200793300066_R05C01")]
+
+# Split phenotype data into BS and oxBS pools
+pheno.bs <- DRN_PHENO.f[DRN_PHENO.f$Pool_ID == "BS",]
+pheno.oxbs <- DRN_PHENO.f[DRN_PHENO.f$Pool_ID == "oxBS",]
+
+# Extract sample IDs from Sample_Name
+pheno.bs$id <- substr(pheno.bs$Sample_Name, 13, 15)
+pheno.oxbs$id <- substr(pheno.oxbs$Sample_Name, 15, 17)
+
+# Check if the IDs are identical
+identical_ids <- identical(pheno.bs$id, pheno.oxbs$id)
+
+# Convert Basename columns to character vectors
+BS <- as.character(pheno.bs$Basename)
+oxBS <- as.character(pheno.oxbs$Basename)
+
+# Subset rgSet by BS and oxBS samples
+RGset.BS <- rgSet[, BS]
+RGset.oxBS <- rgSet[, oxBS]
+
+# Verify column names match Basename vectors
+identical_BS <- identical(colnames(RGset.BS), BS)
+identical_oxBS <- identical(colnames(RGset.oxBS), oxBS)
+
+# Remove unnecessary objects from the environment
+rm(rgSet, DRN_PHENO, DRN_PHENO.1)
+
+# Save the final datasets
+save(RGset.BS, RGset.oxBS, pheno.bs, pheno.oxbs, file = "DRN_RGsets_phenos.Rdata")
+
+# Set working directory
 setwd("/mnt/data1/Ehsan/DRN")
-save(cpg.pfiltered.drn, file="cpg.pfiltered.lc.Rdata")
 
-DRN_PHENO<-read.csv("pheno.drn.all.csv")
-Basename<-substr(DRN_PHENO$sentrix_ID,14,32)
-DRN_PHENO<-cbind(DRN_PHENO,Basename)
+# Load necessary libraries
+library(minfi)
+library(methylumi)
 
-filtered<-which(DRN_PHENO$Basename=="200772260017_R01C01"|
-      DRN_PHENO$Basename=="200772260017_R02C01"|
-      DRN_PHENO$Basename=="200793300066_R06C01")
+# Preprocess raw data for BS and oxBS
+MSet.BS <- preprocessRaw(RGset.BS)
+MSet.oxBS <- preprocessRaw(RGset.oxBS)
 
-##SAMPLES RECOMMENDED BY GENOMESCAN TO BE DROPPED
-filtered.GS<-which(DRN_PHENO$Basename=="200772260017 R01C01"|
-      DRN_PHENO$Basename=="200772260017 R02C01"|
-      DRN_PHENO$Basename=="200772260017 R04C01"|
-      DRN_PHENO$Basename=="200793300066 R06C01")
-
-
-
-DRN_PHENO$Sample_Name[filtered]
-#[1] 7058-001-BS-065  7058-001-oxBS-065  7058-001-oxBS-043
-DRN_PHENO$Basename[which(DRN_PHENO$Sample_Name=="7058-001-BS-043")]
-#[1] 200793300066_R05C01
-
-DRN_PHENO.f<-DRN_PHENO[-which(DRN_PHENO$Basename=="200772260017_R01C01"|
-      DRN_PHENO$Basename=="200772260017_R02C01"|
-      DRN_PHENO$Basename=="200793300066_R06C01"|
-      DRN_PHENO$Basename=="200793300066_R05C01"),]
-rgSet.f<-rgSet[,-which(DRN_PHENO$Basename=="200772260017_R01C01"|
-      DRN_PHENO$Basename=="200772260017_R02C01"|
-      DRN_PHENO$Basename=="200793300066_R06C01"|
-      DRN_PHENO$Basename=="200793300066_R05C01")]
-
-
-pheno.bs<-DRN_PHENO.f[which(DRN_PHENO.f$Pool_ID=="BS"),]
-pheno.oxbs<-DRN_PHENO.f[which(DRN_PHENO.f$Pool_ID=="oxBS"),]
-pheno.bs$id<-substr(pheno.bs$Sample_Name,13,15)
-pheno.oxbs$id<-substr(pheno.oxbs$Sample_Name,15,17)
-
-identical(pheno.bs$id,pheno.oxbs$id)
-
-BS<-as.character(pheno.bs$Basename)
-oxBS<-as.character(pheno.oxbs$Basename)
-
-
-RGset.BS<-rgSet[,BS]
-RGset.oxBS<-rgSet[,oxBS]
-
-identical(colnames(RGset.BS), BS)
-identical(colnames(RGset.oxBS), oxBS)
-
-rm(rgSet,DRN_PHENO,DRN_PHENO.1)
-setwd("/mnt/data1/Ehsan/DRN")
-save(RGset.BS, RGset.oxBS, pheno.bs, pheno.oxbs, file="DRN_RGsets_phenos.Rdata")
-
-
-
-```
-
-##QC
-
-```{r QC, echo=FALSE}
-MSet.BS<-preprocessRaw(RGset.BS)
-MSet.oxBS<-preprocessRaw(RGset.oxBS)
-
+# Plot quality control metrics
 par(mfrow=c(1,2))
 plotQC(getQC(MSet.BS))
 plotQC(getQC(MSet.oxBS))
 
+# Plot density of BS and oxBS
 par(mfrow=c(1,2))
-densityPlot(MSet.BS, main="BS")
-densityPlot(MSet.oxBS, main="oxBS")
-```
+densityPlot(MSet.BS, main = "BS")
+densityPlot(MSet.oxBS, main = "oxBS")
 
-Extarct and plot the intensities of the red/green backgroaund and modification signals
+# Extract and plot the intensities of the red/green background and modification signals
+## BS
+con.red.BS <- getRed(RGset.BS)[getProbeInfo(RGset.BS, type = "Control")$Address, ]
+rownames(con.red.BS) <- getProbeInfo(RGset.BS, type = "Control")$ExtendedType
+con.green.BS <- getGreen(RGset.BS)[getProbeInfo(RGset.BS, type = "Control")$Address, ]
+rownames(con.green.BS) <- getProbeInfo(RGset.BS, type = "Control")$ExtendedType
 
-```{r raw intensities,echo=FALSE}
-##BS
-con.red<-getRed(RGset.BS)[getProbeInfo(RGset.BS, type = "Control")$Address,]
-rownames(con.red)<-getProbeInfo(RGset.BS, type = "Control")$ExtendedType
-con.green<-getGreen(RGset.BS)[getProbeInfo(RGset.BS, type = "Control")$Address,]
-rownames(con.green)<-getProbeInfo(RGset.BS, type = "Control")$ExtendedType
+neg.red.BS <- con.red.BS[getProbeInfo(RGset.BS, type = "Control")$Type == "NEGATIVE", ]
+neg.green.BS <- con.green.BS[getProbeInfo(RGset.BS, type = "Control")$Type == "NEGATIVE", ]
 
-neg.red.bs<-con.red[which(getProbeInfo(RGset.BS, type = "Control")$Type == "NEGATIVE"),]
-neg.green.bs<-con.green[which(getProbeInfo(RGset.BS, type = "Control")$Type == "NEGATIVE"),]
+neg.red.mean.BS <- colMeans(neg.red.BS)
+neg.green.mean.BS <- colMeans(neg.green.BS)
+green.mean.BS <- colMeans(getGreen(RGset.BS))
+red.mean.BS <- colMeans(getRed(RGset.BS))
 
-neg.red.mean.bs.drn<-colMeans(neg.red.bs)
-neg.green.mean.bs.drn<-colMeans(neg.green.bs)
-green.mean.bs.drn<-colMeans(getGreen(RGset.BS))
-red.mean.bs.drn<-colMeans(getRed(RGset.BS))
+## OXBS
+con.red.oxBS <- getRed(RGset.oxBS)[getProbeInfo(RGset.oxBS, type = "Control")$Address, ]
+rownames(con.red.oxBS) <- getProbeInfo(RGset.oxBS, type = "Control")$ExtendedType
+con.green.oxBS <- getGreen(RGset.oxBS)[getProbeInfo(RGset.oxBS, type = "Control")$Address, ]
+rownames(con.green.oxBS) <- getProbeInfo(RGset.oxBS, type = "Control")$ExtendedType
 
-##OXBS
-con.red<-getRed(RGset.oxBS)[getProbeInfo(RGset.oxBS, type = "Control")$Address,]
-rownames(con.red)<-getProbeInfo(RGset.oxBS, type = "Control")$ExtendedType
-con.green<-getGreen(RGset.oxBS)[getProbeInfo(RGset.oxBS, type = "Control")$Address,]
-rownames(con.green)<-getProbeInfo(RGset.oxBS, type = "Control")$ExtendedType
+neg.red.oxBS <- con.red.oxBS[getProbeInfo(RGset.oxBS, type = "Control")$Type == "NEGATIVE", ]
+neg.green.oxBS <- con.green.oxBS[getProbeInfo(RGset.oxBS, type = "Control")$Type == "NEGATIVE", ]
 
+neg.red.mean.oxBS <- colMeans(neg.red.oxBS)
+neg.green.mean.oxBS <- colMeans(neg.green.oxBS)
+green.mean.oxBS <- colMeans(getGreen(RGset.oxBS))
+red.mean.oxBS <- colMeans(getRed(RGset.oxBS))
 
-neg.red.oxbs<-con.red[which(getProbeInfo(RGset.oxBS, type = "Control")$Type == "NEGATIVE"),]
-neg.green.oxbs<-con.green[which(getProbeInfo(RGset.oxBS, type = "Control")$Type == "NEGATIVE"),]
-
-neg.red.mean.oxbs.drn<-colMeans(neg.red.oxbs)
-neg.green.mean.oxbs.drn<-colMeans(neg.green.oxbs)
-green.mean.oxbs.drn<-colMeans(getGreen(RGset.oxBS))
-red.mean.oxbs.drn<-colMeans(getRed(RGset.oxBS))
-
-
+# Plot the intensities
 par(mfrow=c(1,4))
-plot(neg.red.mean.bs.drn, xlab = "Sample", ylab = "Background Intensity", col="red", pch = 16, ylim = c(0, 5000))
-par(new=TRUE)
-plot(neg.green.mean.bs.drn, xlab = "Sample", ylab = "", col="Green", pch = 16, ylim = c(0, 5000))
 
-plot(red.mean.bs.drn, xlab = "Sample", ylab = "Detected Intensity", col="red", pch = 16, ylim = c(0, 5000))
-par(new=TRUE)
-plot(green.mean.bs.drn, xlab = "Sample", ylab = "", col="Green", pch = 16, ylim = c(0, 5000))
+# Plot BS background intensities
+plot(neg.red.mean.BS, xlab = "Sample", ylab = "Background Intensity", col = "red", pch = 16, ylim = c(0, 5000))
+par(new = TRUE)
+plot(neg.green.mean.BS, xlab = "Sample", ylab = "", col = "green", pch = 16, ylim = c(0, 5000))
 
-plot(neg.red.mean.oxbs.drn, xlab = "Sample", ylab = "Background Intensity", col="red", pch = 16, ylim = c(0, 5000))
-par(new=TRUE)
-plot(neg.green.mean.oxbs.drn, xlab = "Sample", ylab = "", col="Green", pch = 16, ylim = c(0, 5000))
+# Plot BS detected intensities
+plot(red.mean.BS, xlab = "Sample", ylab = "Detected Intensity", col = "red", pch = 16, ylim = c(0, 5000))
+par(new = TRUE)
+plot(green.mean.BS, xlab = "Sample", ylab = "", col = "green", pch = 16, ylim = c(0, 5000))
 
-plot(red.mean.oxbs.drn, xlab = "Sample", ylab = "Detected Intensity", col="red", pch = 16, ylim = c(0, 5000))
-par(new=TRUE)
-plot(green.mean.oxbs.drn, xlab = "Sample", ylab = "", col="Green", pch = 16, ylim = c(0, 5000))
+# Plot oxBS background intensities
+plot(neg.red.mean.oxBS, xlab = "Sample", ylab = "Background Intensity", col = "red", pch = 16, ylim = c(0, 5000))
+par(new = TRUE)
+plot(neg.green.mean.oxBS, xlab = "Sample", ylab = "", col = "green", pch = 16, ylim = c(0, 5000))
+
+# Plot oxBS detected intensities
+plot(red.mean.oxBS, xlab = "Sample", ylab = "Detected Intensity", col = "red", pch = 16, ylim = c(0, 5000))
+par(new = TRUE)
+plot(green.mean.oxBS, xlab = "Sample", ylab = "", col = "green", pch = 16, ylim = c(0, 5000))
+
+# Clean up the environment
+rm(con.red.BS, con.green.BS, neg.red.BS, neg.green.BS, neg.red.mean.BS, neg.green.mean.BS, green.mean.BS, red.mean.BS,
+   con.red.oxBS, con.green.oxBS, neg.red.oxBS, neg.green.oxBS, neg.red.mean.oxBS, neg.green.mean.oxBS, green.mean.oxBS, red.mean.oxBS)
 
 
-rm(con.red,con.green,neg.red.bs,neg.green.bs,neg.red.mean.bs.drn,neg.green.mean.bs.drn,green.mean.bs.drn,red.mean.bs.drn,
-   neg.red.oxbs,neg.green.oxbs,neg.red.mean.oxbs.drn,neg.green.mean.oxbs.drn,green.mean.oxbs.drn,red.mean.oxbs.drn)
+# Normalisation (Noob) - Applying R/G ratio flip to fix dye bias
+MSet.Noob.bs.drn  <- preprocessNoob(RGset.BS)
+MSet.Noob.oxbs.drn <- preprocessNoob(RGset.oxBS)
 
-```
-
-##Normalisation(Noob)
-Applying R/G ratio flip to fix dye bias
-
-```{r NoobNormalisation, include=FALSE}
-MSet.Noob.bs.drn  <-preprocessNoob(RGset.BS)
-MSet.Noob.oxbs.drn<-preprocessNoob(RGset.oxBS)
-```
-
-##Plot the Normalised data
-
-```{r NoobNormalisationQCplotting, echo=FALSE}
-par(mfrow=c(1,2))
+# Plot the normalised data
+par(mfrow = c(1, 2))
 plotQC(getQC(MSet.Noob.bs.drn))
 plotQC(getQC(MSet.Noob.oxbs.drn))
-```
 
-Check if the colnames of BS and oxBS are matched
+# Check if the column names of BS and oxBS are matched
+pheno.bs$id <- substr(pheno.bs$Sample_Name, 13, 15)
+pheno.oxbs$id <- substr(pheno.oxbs$Sample_Name, 15, 17)
+colnames(MSet.Noob.bs.drn) <- pheno.bs$id
+colnames(MSet.Noob.oxbs.drn) <- pheno.oxbs$id
+print(identical(colnames(MSet.Noob.bs.drn), colnames(MSet.Noob.oxbs.drn)))
 
-```{r colnamesmatching, include=FALSE}
-pheno.bs$id<-substr(pheno.bs$Sample_Name,13,15)
-pheno.oxbs$id<-substr(pheno.oxbs$Sample_Name,15,17)
-colnames(MSet.Noob.bs.drn)<-pheno.bs$id
-colnames(MSet.Noob.oxbs.drn)<-pheno.oxbs$id
-print(identical(colnames(MSet.Noob.bs.drn),colnames(MSet.Noob.oxbs.drn)))
-```
+# Extracting methylated and unmethylated values from BS & oxBS
+methBS <- getMeth(MSet.Noob.bs.drn)
+methOxBS <- getMeth(MSet.Noob.oxbs.drn)
+unmethBS <- getUnmeth(MSet.Noob.bs.drn)
+unmethOxBS <- getUnmeth(MSet.Noob.oxbs.drn)
 
-Extracting Methylated Unmethylated values from BS & oxBS
+# Plot the signal intensities after normalisation
+par(mfrow = c(1, 2))
+plot(colMeans(methBS), xlab = "Sample", ylab = "Signal Intensity", col = "green", pch = 16, ylim = c(0, 7000))
+par(new = TRUE)
+plot(colMeans(unmethBS), xlab = "Sample", ylab = "", col = "red", pch = 16, ylim = c(0, 7000))
 
-```{r meth_unmeth extraction, include=FALSE}
-methBS      <- getMeth(MSet.Noob.bs.drn)
-methOxBS    <- getMeth(MSet.Noob.oxbs.drn)
-unmethBS    <- getUnmeth(MSet.Noob.bs.drn)
-unmethOxBS  <- getUnmeth(MSet.Noob.oxbs.drn)
-```
+plot(colMeans(methOxBS), xlab = "Sample", ylab = "Signal Intensity", col = "green", pch = 16, ylim = c(0, 7000))
+par(new = TRUE)
+plot(colMeans(unmethOxBS), xlab = "Sample", ylab = "", col = "red", pch = 16, ylim = c(0, 7000))
 
-Plot the signal intensities after normalisation
+# Getting beta values and subtracting oxBS from BS if the column names of normalised betas match for BS and oxBS data
+betas.Noob.bs.drn <- getBeta(MSet.Noob.bs.drn)
+betas.Noob.oxbs.drn <- getBeta(MSet.Noob.oxbs.drn)
+betas.raw.bs.drn <- getBeta(MSet.BS)
+betas.raw.oxbs.drn <- getBeta(MSet.oxBS)
 
-```{r PlotNoobNormalisation, echo=FALSE}
-par(mfrow=c(1,2))
-plot(colMeans(methBS), xlab = "Sample", ylab = "Signal Intensity", col="green", pch = 16, ylim = c(0, 7000))
-par(new=TRUE)
-plot(colMeans(unmethBS), xlab = "Sample", ylab = "Signal Intensity", col="red", pch = 16, ylim = c(0, 7000))
+print(identical(colnames(betas.Noob.bs.drn), colnames(betas.Noob.oxbs.drn)))
 
-plot(colMeans(methOxBS), xlab = "Sample", ylab = "Signal Intensity", col="green", pch = 16, ylim = c(0, 7000))
-par(new=TRUE)
-plot(colMeans(unmethOxBS), xlab = "Sample", ylab = "Signal Intensity", col="red", pch = 16, ylim = c(0, 7000))
-```
+# Subtract oxBS betas from BS betas
+mydf <- betas.Noob.bs.drn - betas.Noob.oxbs.drn
 
-Getting beta values and subtracting oxBS from BS 
-if the conames of normalised betas is matched for BS and oxBS data
+# Plotting the BS-oxBS and beta density plots before and after normalisation
+par(mfrow = c(1, 2))
 
-```{r GettingBetas, include=FALSE}
-betas.Noob.bs.drn    <-getBeta(MSet.Noob.bs.drn)
-betas.Noob.oxbs.drn  <-getBeta(MSet.Noob.oxbs.drn)
-betas.raw.bs.drn     <-getBeta(MSet.BS)
-betas.raw.oxbs.drn   <-getBeta(MSet.oxBS)
+# BS - oxBS density plot
+plot(density(mydf), main = "BS-oxBS")
+abline(v = 0, col = "red", lty = 1, lwd = 1)
 
-print(identical(colnames(betas.Noob.bs.drn),colnames(betas.Noob.oxbs.drn)))
+# Density plots before normalisation
+par(mfrow = c(1, 2))
+plot(density(na.omit(betas.raw.bs.drn)), col = "royalblue3", ylim = c(0, 7), main = "Raw", lwd = 2, xlab = "")
+par(new = TRUE)
+plot(density(na.omit(betas.raw.oxbs.drn)), col = "red4", ylim = c(0, 7), main = "Raw", lwd = 2, xlab = "")
 
-mydf<-betas.Noob.bs.drn-betas.Noob.oxbs.drn
-```
-
-Plotting the BS-oxBS and beta density plots before and after normalisation
-
-```{r NoobNormalisationPLOTS, echo=FALSE}
-plot(density(mydf), main="BS-oxBS")
-abline(v=0, col="red", lty=1, lwd=1)
-par(mfrow=c(1,2))
-
-plot(density(na.omit(betas.raw.bs.drn)), col="royalblue3", ylim=c(0,7), main="Raw",lwd=2, xlab="")
-par(new=TRUE)
-plot(density(na.omit(betas.raw.oxbs.drn)), col="red4", ylim=c(0,7), main="Raw",lwd=2, xlab="")
-
-plot(density(na.omit(betas.Noob.bs.drn)), col="royalblue3", ylim=c(0,7), main="Internal Control",lwd=2, xlab="")
-par(new=TRUE)
-plot(density(na.omit(betas.Noob.oxbs.drn)), col="red4", ylim=c(0,7), main="Internal Control",lwd=2, xlab="")
-```
+# Density plots after normalisation
+plot(density(na.omit(betas.Noob.bs.drn)), col = "royalblue3", ylim = c(0, 7), main = "Internal Control", lwd = 2, xlab = "")
+par(new = TRUE)
+plot(density(na.omit(betas.Noob.oxbs.drn)), col = "red4", ylim = c(0, 7), main = "Internal Control", lwd = 2, xlab = "")
 
 
 
+ plotting BS-oxBS in percentile BS and oxBS beta value bins
 
-```{r plotting BS-oxBS in percentile BS and oxBS beta value bins ,echo=FALSE}
-I.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)<=0.01),])
-II.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.01 & rowMeans(betas.Noob.oxbs.drn)<=0.02),])
-III.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.02 & rowMeans(betas.Noob.oxbs.drn)<=0.03),])
-IV.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.03 & rowMeans(betas.Noob.oxbs.drn)<=0.04),])
-V.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.04 & rowMeans(betas.Noob.oxbs.drn)<=0.05),])
-VI.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.bs.drn)>0.05 & rowMeans(betas.Noob.bs.drn)<=0.06),])
-VII.1<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.06 & rowMeans(betas.Noob.bs.drn)<=0.07),])
-VIII.1<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.07 & rowMeans(betas.Noob.bs.drn)<=0.08),])
-IX.1<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.08 & rowMeans(betas.Noob.bs.drn)<=0.09),])
-X.1<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.09 & rowMeans(betas.Noob.bs.drn)<=0.1),])
+# Define a function to get row names based on beta value ranges
+get_rownames_by_range <- function(data, start, end, step) {
+  lapply(seq(start, end, by=step), function(i) {
+    rownames(data[which(rowMeans(data) > i & rowMeans(data) <= (i + step)), ])
+  })
+}
 
-I.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.10 & rowMeans(betas.Noob.bs.drn)<=0.11),])
-II.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.11 & rowMeans(betas.Noob.bs.drn)<=0.12),])
-III.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.12 & rowMeans(betas.Noob.bs.drn)<=0.13),])
-IV.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.13 & rowMeans(betas.Noob.bs.drn)<=0.14),])
-V.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.14 & rowMeans(betas.Noob.bs.drn)<=0.15),])
-VI.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.15 & rowMeans(betas.Noob.bs.drn)<=0.16),])
-VII.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.16 & rowMeans(betas.Noob.bs.drn)<=0.17),])
-VIII.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.17 & rowMeans(betas.Noob.bs.drn)<=0.18),])
-IX.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.18 & rowMeans(betas.Noob.bs.drn)<=0.19),])
-X.2<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.19 & rowMeans(betas.Noob.bs.drn)<=0.20),])
+# Get row names for both oxbs and bs datasets
+oxbs_ranges <- get_rownames_by_range(betas.Noob.oxbs.drn, 0, 1, 0.01)
+bs_ranges <- get_rownames_by_range(betas.Noob.bs.drn, 0.1, 1, 0.01)
 
-I.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.20 & rowMeans(betas.Noob.bs.drn)<=0.21),])
-II.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.21 & rowMeans(betas.Noob.bs.drn)<=0.22),])
-III.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.22 & rowMeans(betas.Noob.bs.drn)<=0.23),])
-IV.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.23 & rowMeans(betas.Noob.bs.drn)<=0.24),])
-V.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.24 & rowMeans(betas.Noob.bs.drn)<=0.25),])
-VI.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.25 & rowMeans(betas.Noob.bs.drn)<=0.26),])
-VII.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.26 & rowMeans(betas.Noob.bs.drn)<=0.27),])
-VIII.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.27 & rowMeans(betas.Noob.bs.drn)<=0.28),])
-IX.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.28 & rowMeans(betas.Noob.bs.drn)<=0.29),])
-X.3<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.29 & rowMeans(betas.Noob.bs.drn)<=0.30),])
+# Function to generate boxplots
+generate_boxplots <- function(data, ranges) {
+  boxplot(sapply(ranges, function(r) rowMeans(data[rownames(data) %in% r, ])))
+}
 
-I.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.30 & rowMeans(betas.Noob.bs.drn)<=0.31),])
-II.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.31 & rowMeans(betas.Noob.bs.drn)<=0.32),])
-III.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.32 & rowMeans(betas.Noob.bs.drn)<=0.33),])
-IV.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.33 & rowMeans(betas.Noob.bs.drn)<=0.34),])
-V.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.34 & rowMeans(betas.Noob.bs.drn)<=0.35),])
-VI.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.35 & rowMeans(betas.Noob.bs.drn)<=0.36),])
-VII.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.36 & rowMeans(betas.Noob.bs.drn)<=0.37),])
-VIII.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.37 & rowMeans(betas.Noob.bs.drn)<=0.38),])
-IX.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.38 & rowMeans(betas.Noob.bs.drn)<=0.39),])
-X.4<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.39 & rowMeans(betas.Noob.bs.drn)<=0.40),])
+# Plotting
+par(mfrow=c(1, 2))
 
-I.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.40 & rowMeans(betas.Noob.bs.drn)<=0.41),])
-II.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.41 & rowMeans(betas.Noob.bs.drn)<=0.42),])
-III.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.42 & rowMeans(betas.Noob.bs.drn)<=0.43),])
-IV.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.43 & rowMeans(betas.Noob.bs.drn)<=0.44),])
-V.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.44 & rowMeans(betas.Noob.bs.drn)<=0.45),])
-VI.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.45 & rowMeans(betas.Noob.bs.drn)<=0.46),])
-VII.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.46 & rowMeans(betas.Noob.bs.drn)<=0.47),])
-VIII.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.47 & rowMeans(betas.Noob.bs.drn)<=0.48),])
-IX.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.48 & rowMeans(betas.Noob.bs.drn)<=0.49),])
-X.5<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.49 & rowMeans(betas.Noob.bs.drn)<=0.50),])
-
-I.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.50 & rowMeans(betas.Noob.bs.drn)<=0.51),])
-II.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.51 & rowMeans(betas.Noob.bs.drn)<=0.52),])
-III.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.52 & rowMeans(betas.Noob.bs.drn)<=0.53),])
-IV.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.53 & rowMeans(betas.Noob.bs.drn)<=0.54),])
-V.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.54 & rowMeans(betas.Noob.bs.drn)<=0.55),])
-VI.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.55 & rowMeans(betas.Noob.bs.drn)<=0.56),])
-VII.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.56 & rowMeans(betas.Noob.bs.drn)<=0.57),])
-VIII.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.57 & rowMeans(betas.Noob.bs.drn)<=0.58),])
-IX.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.58 & rowMeans(betas.Noob.bs.drn)<=0.59),])
-X.6<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.59 & rowMeans(betas.Noob.bs.drn)<=0.60),])
-
-I.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.60 & rowMeans(betas.Noob.bs.drn)<=0.61),])
-II.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.61 & rowMeans(betas.Noob.bs.drn)<=0.62),])
-III.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.62 & rowMeans(betas.Noob.bs.drn)<=0.63),])
-IV.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.63 & rowMeans(betas.Noob.bs.drn)<=0.64),])
-V.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.64 & rowMeans(betas.Noob.bs.drn)<=0.65),])
-VI.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.65 & rowMeans(betas.Noob.bs.drn)<=0.66),])
-VII.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.66 & rowMeans(betas.Noob.bs.drn)<=0.67),])
-VIII.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.67 & rowMeans(betas.Noob.bs.drn)<=0.68),])
-IX.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.68 & rowMeans(betas.Noob.bs.drn)<=0.69),])
-X.7<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.69 & rowMeans(betas.Noob.bs.drn)<=0.70),])
-
-I.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.70 & rowMeans(betas.Noob.bs.drn)<=0.71),])
-II.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.71 & rowMeans(betas.Noob.bs.drn)<=0.72),])
-III.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.72 & rowMeans(betas.Noob.bs.drn)<=0.73),])
-IV.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.73 & rowMeans(betas.Noob.bs.drn)<=0.74),])
-V.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.74 & rowMeans(betas.Noob.bs.drn)<=0.75),])
-VI.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.75 & rowMeans(betas.Noob.bs.drn)<=0.76),])
-VII.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.76 & rowMeans(betas.Noob.bs.drn)<=0.77),])
-VIII.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.77 & rowMeans(betas.Noob.bs.drn)<=0.78),])
-IX.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.78 & rowMeans(betas.Noob.bs.drn)<=0.79),])
-X.8<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.79 & rowMeans(betas.Noob.bs.drn)<=0.80),])
-
-I.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.80 & rowMeans(betas.Noob.bs.drn)<=0.81),])
-II.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.81 & rowMeans(betas.Noob.bs.drn)<=0.82),])
-III.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.82 & rowMeans(betas.Noob.bs.drn)<=0.83),])
-IV.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.83 & rowMeans(betas.Noob.bs.drn)<=0.84),])
-V.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.84 & rowMeans(betas.Noob.bs.drn)<=0.85),])
-VI.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.85 & rowMeans(betas.Noob.bs.drn)<=0.86),])
-VII.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.86 & rowMeans(betas.Noob.bs.drn)<=0.87),])
-VIII.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.87 & rowMeans(betas.Noob.bs.drn)<=0.88),])
-IX.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.88 & rowMeans(betas.Noob.bs.drn)<=0.89),])
-X.9<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.89 & rowMeans(betas.Noob.bs.drn)<=0.90),])
-
-I.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.90 & rowMeans(betas.Noob.bs.drn)<=91),])
-II.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.91 & rowMeans(betas.Noob.bs.drn)<=0.92),])
-III.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.92 & rowMeans(betas.Noob.bs.drn)<=0.93),])
-IV.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.93 & rowMeans(betas.Noob.bs.drn)<=0.94),])
-V.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.94 & rowMeans(betas.Noob.bs.drn)<=0.95),])
-VI.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.95 & rowMeans(betas.Noob.bs.drn)<=0.96),])
-VII.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.96 & rowMeans(betas.Noob.bs.drn)<=0.97),])
-VIII.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.97 & rowMeans(betas.Noob.bs.drn)<=0.98),])
-IX.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.98 & rowMeans(betas.Noob.bs.drn)<=0.99),])
-X.10<-rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)>0.99 & rowMeans(betas.Noob.bs.drn)<=1),])
-
-par(mfrow=c(1,2))
-boxplot(rowMeans(mydf[which(rownames(mydf) %in% I.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.1),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.2),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.3),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.4),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.5),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.6),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.7),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.8),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% I.9),]),
-        
-        rowMeans(mydf[which(rownames(mydf) %in% II.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.10),]))
+# Generate boxplots for oxbs and bs datasets
+generate_boxplots(mydf, oxbs_ranges)
+abline(h=0, col="red", lty=1, lwd=1)
+generate_boxplots(mydf, bs_ranges)
 abline(h=0, col="red", lty=1, lwd=1)
 
 
-I.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)<=0.01),])
-II.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.01 & rowMeans(betas.Noob.oxbs.drn)<=0.02),])
-III.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.02 & rowMeans(betas.Noob.oxbs.drn)<=0.03),])
-IV.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.03 & rowMeans(betas.Noob.oxbs.drn)<=0.04),])
-V.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.04 & rowMeans(betas.Noob.oxbs.drn)<=0.05),])
-VI.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.05 & rowMeans(betas.Noob.oxbs.drn)<=0.06),])
-VII.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.06 & rowMeans(betas.Noob.oxbs.drn)<=0.07),])
-VIII.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.07 & rowMeans(betas.Noob.oxbs.drn)<=0.08),])
-IX.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.08 & rowMeans(betas.Noob.oxbs.drn)<=0.09),])
-X.1<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.09 & rowMeans(betas.Noob.oxbs.drn)<=0.1),])
+# Maximum likelihood estimation of states of cytosine
+results_exact <- MLML(T.matrix = methBS, U.matrix = unmethBS, L.matrix = unmethOxBS, M.matrix = methOxBS)
 
-I.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.10 & rowMeans(betas.Noob.oxbs.drn)<=0.11),])
-II.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.11 & rowMeans(betas.Noob.oxbs.drn)<=0.12),])
-III.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.12 & rowMeans(betas.Noob.oxbs.drn)<=0.13),])
-IV.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.13 & rowMeans(betas.Noob.oxbs.drn)<=0.14),])
-V.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.14 & rowMeans(betas.Noob.oxbs.drn)<=0.15),])
-VI.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.15 & rowMeans(betas.Noob.oxbs.drn)<=0.16),])
-VII.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.16 & rowMeans(betas.Noob.oxbs.drn)<=0.17),])
-VIII.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.17 & rowMeans(betas.Noob.oxbs.drn)<=0.18),])
-IX.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.18 & rowMeans(betas.Noob.oxbs.drn)<=0.19),])
-X.2<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.19 & rowMeans(betas.Noob.oxbs.drn)<=0.20),])
+# Extract results
+U <- data.frame(results_exact$C)
+mC <- data.frame(results_exact$mC)
+hmC <- data.frame(results_exact$hmC)
 
-I.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.20 & rowMeans(betas.Noob.oxbs.drn)<=0.21),])
-II.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.21 & rowMeans(betas.Noob.oxbs.drn)<=0.22),])
-III.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.22 & rowMeans(betas.Noob.oxbs.drn)<=0.23),])
-IV.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.23 & rowMeans(betas.Noob.oxbs.drn)<=0.24),])
-V.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.24 & rowMeans(betas.Noob.oxbs.drn)<=0.25),])
-VI.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.25 & rowMeans(betas.Noob.oxbs.drn)<=0.26),])
-VII.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.26 & rowMeans(betas.Noob.oxbs.drn)<=0.27),])
-VIII.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.27 & rowMeans(betas.Noob.oxbs.drn)<=0.28),])
-IX.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.28 & rowMeans(betas.Noob.oxbs.drn)<=0.29),])
-X.3<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.29 & rowMeans(betas.Noob.oxbs.drn)<=0.30),])
+# Filter for rows where mean BS betas are greater than 0.1
+hmC.f <- hmC[rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn) > 0.1), ]), ]
 
-I.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.30 & rowMeans(betas.Noob.oxbs.drn)<=0.31),])
-II.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.31 & rowMeans(betas.Noob.oxbs.drn)<=0.32),])
-III.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.32 & rowMeans(betas.Noob.oxbs.drn)<=0.33),])
-IV.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.33 & rowMeans(betas.Noob.oxbs.drn)<=0.34),])
-V.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.34 & rowMeans(betas.Noob.oxbs.drn)<=0.35),])
-VI.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.35 & rowMeans(betas.Noob.oxbs.drn)<=0.36),])
-VII.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.36 & rowMeans(betas.Noob.oxbs.drn)<=0.37),])
-VIII.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.37 & rowMeans(betas.Noob.oxbs.drn)<=0.38),])
-IX.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.38 & rowMeans(betas.Noob.oxbs.drn)<=0.39),])
-X.4<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.39 & rowMeans(betas.Noob.oxbs.drn)<=0.40),])
+# Identify rows with fewer than half the columns equal to zero
+a <- data.frame(apply(hmC.f, 1, function(x) sum(x == 0)))
+a <- which(a[, 1] < 0.5 * ncol(hmC.f))
 
-I.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.40 & rowMeans(betas.Noob.oxbs.drn)<=0.41),])
-II.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.41 & rowMeans(betas.Noob.oxbs.drn)<=0.42),])
-III.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.42 & rowMeans(betas.Noob.oxbs.drn)<=0.43),])
-IV.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.43 & rowMeans(betas.Noob.oxbs.drn)<=0.44),])
-V.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.44 & rowMeans(betas.Noob.oxbs.drn)<=0.45),])
-VI.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.45 & rowMeans(betas.Noob.oxbs.drn)<=0.46),])
-VII.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.46 & rowMeans(betas.Noob.oxbs.drn)<=0.47),])
-VIII.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.47 & rowMeans(betas.Noob.oxbs.drn)<=0.48),])
-IX.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.48 & rowMeans(betas.Noob.oxbs.drn)<=0.49),])
-X.5<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.49 & rowMeans(betas.Noob.oxbs.drn)<=0.50),])
+# Subset CpG sites with non-zero hmC values
+length(a) #[1] 806673
+cpg.hmc <- rownames(hmC.f[a, ])
 
-I.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.50 & rowMeans(betas.Noob.oxbs.drn)<=0.51),])
-II.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.51 & rowMeans(betas.Noob.oxbs.drn)<=0.52),])
-III.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.52 & rowMeans(betas.Noob.oxbs.drn)<=0.53),])
-IV.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.53 & rowMeans(betas.Noob.oxbs.drn)<=0.54),])
-V.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.54 & rowMeans(betas.Noob.oxbs.drn)<=0.55),])
-VI.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.55 & rowMeans(betas.Noob.oxbs.drn)<=0.56),])
-VII.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.56 & rowMeans(betas.Noob.oxbs.drn)<=0.57),])
-VIII.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.57 & rowMeans(betas.Noob.oxbs.drn)<=0.58),])
-IX.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.58 & rowMeans(betas.Noob.oxbs.drn)<=0.59),])
-X.6<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.59 & rowMeans(betas.Noob.oxbs.drn)<=0.60),])
+# Save results
+betas <- betas.Noob.bs.drn
+save(U, mC, hmC, betas, pheno.bs, cpg.hmc, cpg.pfiltered, file = "DRN_ML_ReadyforEWAS.Rdata")
 
-I.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.60 & rowMeans(betas.Noob.oxbs.drn)<=0.61),])
-II.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.61 & rowMeans(betas.Noob.oxbs.drn)<=0.62),])
-III.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.62 & rowMeans(betas.Noob.oxbs.drn)<=0.63),])
-IV.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.63 & rowMeans(betas.Noob.oxbs.drn)<=0.64),])
-V.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.64 & rowMeans(betas.Noob.oxbs.drn)<=0.65),])
-VI.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.65 & rowMeans(betas.Noob.oxbs.drn)<=0.66),])
-VII.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.66 & rowMeans(betas.Noob.oxbs.drn)<=0.67),])
-VIII.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.67 & rowMeans(betas.Noob.oxbs.drn)<=0.68),])
-IX.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.68 & rowMeans(betas.Noob.oxbs.drn)<=0.69),])
-X.7<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.69 & rowMeans(betas.Noob.oxbs.drn)<=0.70),])
+# Plotting the results
+par(mfrow = c(1, 3))
 
-I.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.70 & rowMeans(betas.Noob.oxbs.drn)<=0.71),])
-II.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.71 & rowMeans(betas.Noob.oxbs.drn)<=0.72),])
-III.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.72 & rowMeans(betas.Noob.oxbs.drn)<=0.73),])
-IV.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.73 & rowMeans(betas.Noob.oxbs.drn)<=0.74),])
-V.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.74 & rowMeans(betas.Noob.oxbs.drn)<=0.75),])
-VI.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.75 & rowMeans(betas.Noob.oxbs.drn)<=0.76),])
-VII.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.76 & rowMeans(betas.Noob.oxbs.drn)<=0.77),])
-VIII.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.77 & rowMeans(betas.Noob.oxbs.drn)<=0.78),])
-IX.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.78 & rowMeans(betas.Noob.oxbs.drn)<=0.79),])
-X.8<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.79 & rowMeans(betas.Noob.oxbs.drn)<=0.80),])
+# Density plot for unmethylated cytosine
+plot(density(as.matrix(U)), main = "C", ylim = c(0, 10))
 
-I.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.80 & rowMeans(betas.Noob.oxbs.drn)<=0.81),])
-II.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.81 & rowMeans(betas.Noob.oxbs.drn)<=0.82),])
-III.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.82 & rowMeans(betas.Noob.oxbs.drn)<=0.83),])
-IV.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.83 & rowMeans(betas.Noob.oxbs.drn)<=0.84),])
-V.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.84 & rowMeans(betas.Noob.oxbs.drn)<=0.85),])
-VI.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.85 & rowMeans(betas.Noob.oxbs.drn)<=0.86),])
-VII.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.86 & rowMeans(betas.Noob.oxbs.drn)<=0.87),])
-VIII.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.87 & rowMeans(betas.Noob.oxbs.drn)<=0.88),])
-IX.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.88 & rowMeans(betas.Noob.oxbs.drn)<=0.89),])
-X.9<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.89 & rowMeans(betas.Noob.oxbs.drn)<=0.90),])
+# Density plot for methylated cytosine
+plot(density(as.matrix(mC)), main = "mC", ylim = c(0, 10))
 
-I.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.90 & rowMeans(betas.Noob.oxbs.drn)<=91),])
-II.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.91 & rowMeans(betas.Noob.oxbs.drn)<=0.92),])
-III.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.92 & rowMeans(betas.Noob.oxbs.drn)<=0.93),])
-IV.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.93 & rowMeans(betas.Noob.oxbs.drn)<=0.94),])
-V.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.94 & rowMeans(betas.Noob.oxbs.drn)<=0.95),])
-VI.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.95 & rowMeans(betas.Noob.oxbs.drn)<=0.96),])
-VII.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.96 & rowMeans(betas.Noob.oxbs.drn)<=0.97),])
-VIII.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.97 & rowMeans(betas.Noob.oxbs.drn)<=0.98),])
-IX.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.98 & rowMeans(betas.Noob.oxbs.drn)<=0.99),])
-X.10<-rownames(betas.Noob.oxbs.drn[which(rowMeans(betas.Noob.oxbs.drn)>0.99 & rowMeans(betas.Noob.oxbs.drn)<=1),])
-
-
-boxplot(rowMeans(mydf[which(rownames(mydf) %in% I.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.1),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.1),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.2),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.2),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.3),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.3),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.4),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.4),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.5),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.5),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.6),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.6),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.7),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.7),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.8),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.8),]),
-        
-        
-        rowMeans(mydf[which(rownames(mydf) %in% I.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% II.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.9),]),
-        rowMeans(mydf[which(rownames(mydf) %in% I.9),]),
-        
-        rowMeans(mydf[which(rownames(mydf) %in% II.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% III.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IV.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% V.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VI.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VII.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% VIII.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% IX.10),]),
-        rowMeans(mydf[which(rownames(mydf) %in% X.10),]))
-
-abline(h=0, col="red", lty=1, lwd=1)
-```
-
-
-##Maximum likliehood estomation of states of cytosine
-
-
-```{r ML method, include=FALSE}
-results_exact <-MLML(T.matrix = methBS , U.matrix = unmethBS, L.matrix = unmethOxBS, M.matrix = methOxBS)
-
-U<-data.frame(results_exact$C)
-mC<-data.frame(results_exact$mC)
-hmC<-data.frame(results_exact$hmC)
-
-hmC.f<-hmC[rownames(betas.Noob.bs.drn[which(rowMeans(betas.Noob.bs.drn)> 0.1),]),]
-
-a<-data.frame(apply(hmC.f, 1, function(x) sum(x==0)))
-a<-which(a[,1]< .5*ncol(hmC.f))
-length(a)#[1] 806673
-cpg.hmc<-hmC.f[a,]
-cpg.hmc<-rownames(hmC.f[a,])
-
-betas<-betas.Noob.bs.drn
-save(U, mC, hmC, betas, pheno.bs, cpg.hmc, cpg.pfiltered, file="DRN_ML_ReadyforEWAS.Rdata" )
-```
-
-
-```{r MLPLOTS method, echo =FALSE}
-par(mfrow=c(1,3))
-plot(density(as.matrix(U)),main="C",ylim=c(0,10))
-plot(density(as.matrix(mC)), main="mC",ylim=c(0,10))
-plot(density(as.matrix(hmC[cpg.hmc,])), main="hmC",ylim=c(0,10))
-```
-
-
-
-
-
-
-
+# Density plot for hydroxymethylated cytosine
+plot(density(as.matrix(hmC[cpg.hmc, ])), main = "hmC", ylim = c(0, 10))
 
 
 
