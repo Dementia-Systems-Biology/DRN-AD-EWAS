@@ -13,15 +13,6 @@ Scripts for loading and preprocessing raw data, including normalization and qual
 Differential Modification Analysis: 
 Code for identifying differentially unmodified positions (DUPs), differentially methylated positions (DMPs), and differentially hydroxymethylated positions (DHPs) across the genome.
 
-Gene Ontology Enrichment: 
-Scripts to perform gene ontology enrichment analysis for significant loci.
-
-Validation: 
-Code used for the technical validation of significant findings using bisulfite pyrosequencing data.
-
-Single-Cell Analysis: 
-Scripts for analyzing cell type-specific DNA modifications in serotonergic and non-serotonergic cells isolated from the DRN using laser capture microdissection (LCM).
-
 Requirements
 
 R version 3.3.2 or higher
